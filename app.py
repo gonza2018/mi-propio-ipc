@@ -145,12 +145,19 @@ for leaf in d.LEAVES:
     st.session_state.setdefault(f"gasto_{leaf['id']}", 0.0)
 st.session_state.setdefault("show_results", False)
 
-st.title("📊 Mi Propio IPC")
+st.title("📊 Calculá tu propio IPC")
 st.caption("Dirección General de Estadística y Censos — Región Noroeste (NOA), Santiago del Estero")
 st.markdown(
-    "Completá cuánto gastás en cada rubro durante el último mes difundido "
-    "para ver cuál hubiera sido la variación de precios de tu propio consumo, "
-    "comparada con el IPC oficial de la región Noroeste y con el IPC Nacional."
+    "Mi Propio IPC es una herramienta interactiva que te permite calcular cómo "
+    "varía una canasta de consumo personalizada. Para eso, utiliza los gastos "
+    "que cargás y los datos de variación de precios publicados por el INDEC. "
+    "El resultado es una estimación orientativa de la evolución de tu propia "
+    "canasta de consumo."
+)
+st.caption(
+    "El resultado no constituye un índice oficial provincial. Permite comparar "
+    "la variación estimada de tus consumos cargados con el IPC de la región "
+    "Noroeste y con el IPC Nacional."
 )
 
 st.divider()
