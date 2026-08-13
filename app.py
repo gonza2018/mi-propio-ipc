@@ -41,6 +41,29 @@ PALETA_TORTA = [
 
 ASSETS = Path(__file__).parent / "assets"
 
+MESES_ES = {
+    1: "enero", 2: "febrero", 3: "marzo", 4: "abril", 5: "mayo", 6: "junio",
+    7: "julio", 8: "agosto", 9: "septiembre", 10: "octubre", 11: "noviembre", 12: "diciembre",
+}
+MESES_ES_ABR = {
+    1: "ene", 2: "feb", 3: "mar", 4: "abr", 5: "may", 6: "jun",
+    7: "jul", 8: "ago", 9: "sep", 10: "oct", 11: "nov", 12: "dic",
+}
+
+
+def mes_es(periodo: pd.Timestamp) -> str:
+    return f"{MESES_ES[periodo.month]} de {periodo.year}"
+
+
+def mes_abr_es(periodo: pd.Timestamp) -> str:
+    return f"{MESES_ES_ABR[periodo.month]}-{str(periodo.year)[2:]}"
+
+
+def num_ar(numero: float, decimales: int = 0) -> str:
+    """Formatea con separador de miles '.' y decimales ',' (estilo Argentina)."""
+    texto = f"{numero:,.{decimales}f}"
+    return texto.replace(",", "␟").replace(".", ",").replace("␟", ".")
+
 
 def _b64(path: Path) -> str:
     return base64.b64encode(path.read_bytes()).decode()
@@ -72,7 +95,7 @@ if logo_path.exists():
 st.markdown("<div class='franja-ondas'></div>", unsafe_allow_html=True)
 
 
-@st.cache_resource(show_spinner="Buscando datos actualizados del INDEC…")
+@st.cache_resource(show_spinner="Buscando datos actualizados del INDEC…", ttl=6 * 3600)
 def cargar_datos():
     return d.DatosIPC("data/serie_ipc_divisiones.csv", "data/sh_ipc_aperturas.xls")
 
@@ -84,6 +107,9 @@ with st.sidebar:
     st.markdown("**Fuente de datos**")
     st.caption(f"serie_ipc_divisiones.csv — {etiqueta_origen[datos.origenes['divisiones']]}")
     st.caption(f"sh_ipc_aperturas.xls — {etiqueta_origen[datos.origenes['aperturas']]}")
+    if st.button("🔄 Buscar actualización ahora", use_container_width=True):
+        st.cache_resource.clear()
+        st.rerun()
 
     with st.expander("ℹ️ Para más información"):
         st.markdown(
@@ -133,7 +159,7 @@ col_form, col_result = st.columns([1, 1.2], gap="large")
 
 with col_form:
   with st.container(border=True):
-    st.markdown("##### Selección de aperturas del IPC")
+    st.markdown("##### Carga de gastos por rubro")
     h1, h2, h3 = st.columns([3, 2, 2])
     h2.markdown("**Gasto en pesos**")
     h3.markdown("**Participación %**")
@@ -148,17 +174,17 @@ with col_form:
             with c2:
                 v = st.number_input(
                     label, key=f"gasto_{leaf_id}", min_value=0.0, step=100.0,
-                    format="%.0f", label_visibility="collapsed",
+                    format="%.2f", label_visibility="collapsed",
                 )
             pct = (v / total_actual * 100) if total_actual > 0 else 0.0
             with c3:
-                st.markdown(f"{pct:.2f} %")
+                st.markdown(f"{num_ar(pct, 2)} %")
         else:
             with c2:
-                st.markdown(f"$ {value:,.0f}")
+                st.markdown(f"$ {num_ar(value, 2)}")
             pct = (value / total_actual * 100) if total_actual > 0 else 0.0
             with c3:
-                st.markdown(f"{pct:.2f} %")
+                st.markdown(f"{num_ar(pct, 2)} %")
 
     for cat in d.CATEGORIES:
         if cat["children"]:
@@ -173,7 +199,7 @@ with col_form:
     st.markdown("---")
     ct1, ct2 = st.columns([3, 4])
     ct1.markdown("**Total**")
-    ct2.markdown(f"**$ {total_final:,.0f}**")
+    ct2.markdown(f"**$ {num_ar(total_final, 2)}**")
 
     if st.button("Calcular tu IPC", type="primary", use_container_width=True):
         st.session_state["show_results"] = True
@@ -191,14 +217,14 @@ with col_result:
         else:
             periodo_sel = datos.ultimo_periodo()
             resumen = d.resumen(serie_personal, periodo_sel)
-            mes_es = periodo_sel.strftime("%B de %Y").capitalize()
+            mes_legible = mes_es(periodo_sel)
 
-            st.markdown(f"##### En función de tus gastos, calculamos la variación % de tu IPC a {mes_es}")
+            st.markdown(f"##### En función de tus gastos, calculamos la variación % de tu IPC a {mes_legible}")
             st.markdown(
                 f"<div style='text-align:center; font-size:1.05rem; line-height:2;'>"
-                f"La variación porcentual mensual fue de <b>{resumen['mensual']:.1f}%</b><br>"
-                f"La variación porcentual acumulada del año fue de <b>{resumen['acumulado']:.1f}%</b><br>"
-                f"La variación porcentual interanual fue de <b>{resumen['interanual']:.1f}%</b>"
+                f"La variación porcentual mensual fue de <b>{num_ar(resumen['mensual'], 1)}%</b><br>"
+                f"La variación porcentual acumulada del año fue de <b>{num_ar(resumen['acumulado'], 1)}%</b><br>"
+                f"La variación porcentual interanual fue de <b>{num_ar(resumen['interanual'], 1)}%</b>"
                 f"</div>",
                 unsafe_allow_html=True,
             )
@@ -211,7 +237,7 @@ with col_result:
                 else:
                     monto = st.session_state[f"gasto_{cat['id']}"]
                 if monto > 0:
-                    torta_data.append({"categoria": cat["label"], "monto": monto})
+                    torta_data.append({"categoria": cat["label"], "monto": monto, "monto_fmt": f"$ {num_ar(monto, 2)}"})
             torta_df = pd.DataFrame(torta_data)
 
             torta = (
@@ -224,7 +250,7 @@ with col_result:
                         scale=alt.Scale(range=PALETA_TORTA),
                         legend=alt.Legend(orient="bottom", columns=2, labelLimit=260),
                     ),
-                    tooltip=["categoria:N", alt.Tooltip("monto:Q", format=",.0f", title="Gasto ($)")],
+                    tooltip=["categoria:N", alt.Tooltip("monto_fmt:N", title="Gasto")],
                 )
                 .properties(height=320)
             )
@@ -232,12 +258,20 @@ with col_result:
 
             st.markdown(f"###### Variaciones % mensuales de IPC {d.REGION}, IPC Nacional y tu IPC")
             cmp_df = d.marco_comparacion(datos, serie_personal)
+            cmp_df["periodo_label"] = cmp_df["periodo"].apply(mes_abr_es)
+            cmp_df["valor_fmt"] = cmp_df["valor"].apply(lambda x: f"{num_ar(x, 2)} %")
+            orden_meses = (
+                cmp_df[["periodo", "periodo_label"]]
+                .drop_duplicates()
+                .sort_values("periodo")["periodo_label"]
+                .tolist()
+            )
 
             linea = (
                 alt.Chart(cmp_df)
                 .mark_line(point=True)
                 .encode(
-                    x=alt.X("periodo:T", title=None, axis=alt.Axis(format="%b-%Y")),
+                    x=alt.X("periodo_label:N", title=None, sort=orden_meses),
                     y=alt.Y("valor:Q", title=None, axis=alt.Axis(format=".1f")),
                     color=alt.Color(
                         "serie:N", title=None,
@@ -246,7 +280,7 @@ with col_result:
                             range=[COLOR_PERSONAL, COLOR_NOROESTE, COLOR_NACIONAL],
                         ),
                     ),
-                    tooltip=["periodo:T", "serie:N", alt.Tooltip("valor:Q", format=".2f")],
+                    tooltip=["periodo_label:N", "serie:N", alt.Tooltip("valor_fmt:N", title="Variación")],
                 )
                 .properties(height=350)
             )
@@ -255,7 +289,7 @@ with col_result:
             st.caption(
                 "Nota metodológica: la variación acumulada e interanual se calculan "
                 "encadenando las variaciones mensuales reales del INDEC de cada apertura, "
-                "con tus pesos actuales aplicados también a los meses históricos."
+                "con tu participación actual por rubro aplicada también a los meses históricos."
             )
 
 st.markdown("<div class='franja-ondas'></div>", unsafe_allow_html=True)

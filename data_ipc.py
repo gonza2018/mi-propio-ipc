@@ -41,20 +41,35 @@ URL_DIVISIONES = "https://www.indec.gob.ar/ftp/cuadros/economia/serie_ipc_divisi
 URL_APERTURAS = "https://www.indec.gob.ar/ftp/cuadros/economia/sh_ipc_aperturas.xls"
 
 
-def _descargar(url: str, timeout: int = 8) -> bytes | None:
-    try:
-        resp = requests.get(url, timeout=timeout)
-        resp.raise_for_status()
-        return resp.content
-    except Exception:
-        return None
+# INDEC (y muchos sitios .gob.ar) devuelven error o cortan la conexión ante
+# pedidos sin User-Agent de navegador. Sin este header, la descarga fallaba
+# silenciosamente y la app terminaba usando siempre el archivo local aunque
+# hubiera internet disponible.
+_HEADERS = {
+    "User-Agent": (
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+        "(KHTML, like Gecko) Chrome/124.0 Safari/537.36"
+    )
+}
+
+
+def _descargar(url: str, timeout: int = 15, intentos: int = 2) -> bytes | None:
+    """Intenta descargar `intentos` veces antes de rendirse (a fuente local)."""
+    for _ in range(intentos):
+        try:
+            resp = requests.get(url, timeout=timeout, headers=_HEADERS)
+            resp.raise_for_status()
+            return resp.content
+        except Exception:
+            continue
+    return None
 
 
 def _resolver_fuente(path_local: str, url: str) -> tuple[object, str]:
-    """Intenta traer el archivo de internet primero; si no hay conexión (o
-    falla la descarga), usa el archivo local de data/. Devuelve (fuente,
-    origen) donde origen es 'remoto' o 'local', y fuente es algo que
-    pandas puede leer directo (BytesIO o path)."""
+    """Primero intenta traer el archivo directo del INDEC; solo si eso falla
+    (sin conexión, sitio caído, etc.) usa el archivo local de respaldo en
+    data/. Devuelve (fuente, origen) donde origen es 'remoto' o 'local', y
+    fuente es algo que pandas puede leer directo (BytesIO o path)."""
     contenido = _descargar(url)
     if contenido is not None:
         return io.BytesIO(contenido), "remoto"
